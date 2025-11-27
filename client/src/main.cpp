@@ -1,33 +1,33 @@
 #include <iostream>
-#include <vector>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fstream>
-#include <string.h>
 #include <QApplication>
-#include "./TcpClient/TcpClient.hpp"
+#include "./HttpClient/HttpClient.hpp"
 #include "../../tools/ErrorWarning.hpp"
 #include "../../tools/DebugStatement.hpp"
 
-void getIpPort(int argc, char* argv[], const char*& ip, int* port)
+void getUrl(int argc, char* argv[], QString &url)
 {
-	if (argc != 3)
-		error("Usage: " + std::string(argv[0]) + " <IP> <PORT>\n", argv[0]);
+	if (argc != 2)
+		error("Usage: " + std::string(argv[0]) + " <URL>\n", argv[0]);
 
-	ip = argv[1];
-	*port = std::stoi(argv[2]);
+	url = QString::fromUtf8(argv[1]);
 }
 
 int main(int argc, char* argv[])
 {
-	const char* ip;
-	int port;
-	getIpPort(argc, argv, ip, &port);
+	try
+	{
+		QString url;
+		getUrl(argc, argv, url);
 
-	QApplication app(argc, argv);
-	TcpClient client(ip, port);
-	client.run();
+		QApplication app(argc, argv);
+		HttpClient client(url);
+		client.show();
 
-	return app.exec();
+		return app.exec();
+	}
+	catch (const std::exception &e)
+	{
+		std::cerr << e.what() << std::endl;
+		return 1;
+	}
 }
