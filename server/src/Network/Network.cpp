@@ -3,103 +3,186 @@
 #include "../Screenshot/Screenshot.hpp"
 #include "../CloudflaredTunnel/CloudflaredTunnel.hpp"
 #include <iostream>
+#include <vector>
+#include <unistd.h>
+#include <cstring>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <cstdio>
+#include <memory>
+#include <array>
+#include <cstdlib>
 
-Network::Network(const t_config &c) : cfg(c) {}
+Network::Network(t_config& config) : config(config) {}
 
-void Network::launch()
-{
-	CloudflaredTunnel tunnel(CLOUDFLARED_PATH, cfg.port);
-	if (!tunnel.start())
-	{
-		error("Failed to retrieve cloudflared tunnel.", "Network::launch");
-	}
-	// Create socket
-	int sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock < 0)
-	{
-		error("socket failed: " + std::string(strerror(errno)), "Network");
-		exit(1);
-	}
-
-	sockaddr_in addr;
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(cfg.port);
-	addr.sin_addr.s_addr = inet_addr(cfg.ip.c_str());
-
-	int opt = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-		error("setsockopt failed: " + std::string(strerror(errno)), "Network");
-
-	if (bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0)
-		error("bind failed: " + std::string(strerror(errno)), "Network");
-
-	if (listen(sock, SOMAXCONN) < 0)
-		error("listen failed: " + std::string(strerror(errno)), "Network");
-
-	DEBUG_OUT << std::endl << CYAN << "NETWORK" << std::endl
-			  << "=======" << RESET << std::endl << "Listening on "
-			  << cfg.ip << ":" << cfg.port << std::endl
-			  << "Tunnel URL: " << tunnel.getUrl() << std::endl;
-
-	bool lookingForClient = true;
-	while (lookingForClient)
-	{
-		int client = accept(sock, NULL, NULL);
-		if (client < 0)
-		{
+void Network::runServer() {
+	while (true) {
+		killProcessOnPort(config.portStart);
+		// Ensure the server socket is listening
+		if (sock < 0) {
+			startListening();
+			makeTunnel();
+		}
+		std::cout << "Looking for client..." << std::endl;
+		client = accept(sock, nullptr, nullptr);
+		if (client < 0) {
 			warning("accept failed: " + std::string(strerror(errno)), "Network");
+			close(sock);  // close failed socket and retry
+			sock = -1;
 			continue;
 		}
 		DEBUG_OUT << "Client connected" << std::endl;
 
-		bool Streaming = true;
-		std::vector<uint8_t> screenshot;
-		int w, h;
+		Streaming = true;
+		w = h = 0;
 
 		// Write HTTP header once
 		std::string header =
 			"HTTP/1.1 200 OK\r\n"
 			"Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
-			"Connection: keep-alive\r\n"
-			"\r\n";
+			"Connection: keep-alive\r\n\r\n";
 		send(client, header.c_str(), header.size(), 0);
 
-		while (Streaming)
-		{
-			screenshot = Screenshot::captureJPEG(w, h, 90);
-			if (screenshot.empty()) continue;
+		stream();
 
-			std::string frameHeader =
-				"--frame\r\n"
-				"Content-Type: image/jpeg\r\n"
-				"Content-Length: " + std::to_string(screenshot.size()) + "\r\n\r\n";
+		close(client);  // close client on disconnect
+		client = -1;
+	}
+}
 
-			// Send frame header
+void Network::startListening()
+{
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = inet_addr(config.ip.c_str());
+
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
+		error("socket failed: " + std::string(strerror(errno)), "Network");
+
+	bool bound = false;
+	for (int port = config.portStart; port <= config.portEnd; port++) {
+		addr.sin_port = htons(port);
+		int opt = 1;
+		setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+		if (bind(sock, (sockaddr*)&addr, sizeof(addr)) == 0) {
+			config.port = port;
+			bound = true;
+			break;
+		}
+	}
+
+	if (!bound)
+		error("no available port", "Network");
+
+	if (listen(sock, SOMAXCONN) < 0)
+		error("listen failed: " + std::string(strerror(errno)), "Network");
+}
+
+void Network::makeTunnel() {
+    if (!tunnel || !tunnel->isRunning()) {
+        delete tunnel;
+        tunnel = new CloudflaredTunnel(CLOUDFLARED_PATH, config.port, config.cloudflaredUrl);
+        if (!tunnel->start())
+            error("Failed to retrieve cloudflared tunnel.", "Network::launch");
+    }
+
+    DEBUG_OUT << std::endl << CYAN << "NETWORK" << std::endl
+              << "=======" << RESET << std::endl << "Listening on "
+              << config.ip << ":" << config.port << std::endl;
+}
+
+void Network::stream() {
+	t_frame frame;
+
+	while (Streaming) {
+		int width = 0, height = 0;
+		if (!Screenshot::newFrame(width, height, 90, frame))
+			continue; // Nothing changed
+
+		if (frame.fullFrame) {
+			// Send fullFrame flag
+			bool fullFlag = true;
+			send(client, &fullFlag, sizeof(fullFlag), 0);
+
+			// Send full frame size
+			int dataSize = static_cast<int>(frame.screen.size());
+			send(client, &dataSize, sizeof(dataSize), 0);
+
+			// Send full frame JPEG data
 			size_t sent = 0;
-			while (sent < frameHeader.size()) {
-				ssize_t n = send(client, frameHeader.data() + sent, frameHeader.size() - sent, 0);
+			while (sent < frame.screen.size()) {
+				ssize_t n = send(client, frame.screen.data() + sent, frame.screen.size() - sent, 0);
 				if (n <= 0) { Streaming = false; break; }
 				sent += n;
 			}
 			if (!Streaming) break;
+		} else {
+			// Send fullFrame flag
+			bool fullFlag = false;
+			send(client, &fullFlag, sizeof(fullFlag), 0);
 
-			// Send frame data
-			sent = 0;
-			while (sent < screenshot.size()) {
-				ssize_t n = send(client, screenshot.data() + sent, screenshot.size() - sent, 0);
-				if (n <= 0) { Streaming = false; break; }
-				sent += n;
+			// Send number of tiles
+			int tileCount = frame.howManyTiles;
+			send(client, &tileCount, sizeof(tileCount), 0);
+
+			// Send each tile
+			for (auto& tile : frame.tiles) {
+				send(client, &tile.y, sizeof(tile.y), 0);
+				send(client, &tile.x, sizeof(tile.x), 0);
+				send(client, &tile.height, sizeof(tile.height), 0);
+				send(client, &tile.width, sizeof(tile.width), 0);
+
+				int dataSize = static_cast<int>(tile.tile.size());
+				send(client, &dataSize, sizeof(dataSize), 0);
+
+				size_t sent = 0;
+				while (sent < tile.tile.size()) {
+					ssize_t n = send(client, tile.tile.data() + sent, tile.tile.size() - sent, 0);
+					if (n <= 0) { Streaming = false; break; }
+					sent += n;
+				}
+				if (!Streaming) break;
 			}
-			if (!Streaming) break;
-
-			// Send end-of-frame \r\n
-			const char* frameEnd = "\r\n";
-			send(client, frameEnd, 2, 0);
-
-			// small sleep to avoid flooding
-			usleep(33000); // ~30 FPS
 		}
 
+		usleep(33000); // ~30 FPS
 	}
+
+	Streaming = false;
+	if (client >= 0) {
+		close(client);
+		client = -1;
+	}
+}
+
+
+void Network::killProcessOnPort(int port) {
+	std::string cmd = "lsof -t -i :" + std::to_string(port);
+	std::array<char, 128> buffer{};
+	std::string result;
+
+	FILE* pipe = popen(cmd.c_str(), "r");
+	if (!pipe) {
+		std::cerr << "Failed to run lsof\n";
+		return;
+	}
+
+	while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+		result += buffer.data();
+
+	pclose(pipe);
+
+	if (result.empty()) {
+		std::cout << "Nothing is listening on port " << port << "\n";
+		return;
+	}
+
+	int pid = std::stoi(result);
+	std::cout << "Killing PID " << pid << " on port " << port << "\n";
+
+	std::string killCmd = "kill -9 " + std::to_string(pid);
+	system(killCmd.c_str());
+	usleep(33000);
 }

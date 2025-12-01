@@ -1,3 +1,4 @@
+#pragma once
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -12,12 +13,25 @@
 #include "../../../include/DataTypes.hpp"
 #include "../../../include/Colors.hpp"
 
+class CloudflaredTunnel;
+
 class Network
 {
 private:
-	t_config cfg;
+    t_config config;
+    int sock = -1;
+    int client = -1;
+    bool Streaming = false;
+    int w = 0, h = 0;
+
+    CloudflaredTunnel* tunnel = nullptr;
+
+    void startListening();
+    void makeTunnel();
+    void stream();
+    void killProcessOnPort(int port);
 
 public:
-	Network(const t_config &c);
-	void launch();
+	Network(t_config& config);
+	void runServer();
 };

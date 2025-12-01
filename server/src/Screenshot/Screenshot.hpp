@@ -1,16 +1,11 @@
 #pragma once
-#include <QtGui/QGuiApplication>
-#include <QtGui/QScreen>
-#include <QtGui/QImage>
-#include <QBuffer>
-#include <QByteArray>
-#include <fstream>
-#include <vector>
-#include <string>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QImage>
+#include "../../../include/DataTypes.hpp"
 
 class Screenshot
 {
 public:
-    static std::vector<uint8_t> captureJPEG(int &width, int &height, int quality);
-    static bool saveJPEGToFile(const std::string& filename, int quality);
+    static bool newFrame(int &width, int &height, int quality, t_frame& frame);
 };

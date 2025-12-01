@@ -6,3 +6,4 @@
 #define LIGHT_GREY	"\033[0;37m"
 #define MAGENTA     "\033[1;35m"
 #define GREEN       "\033[0;32m"
+#define RED         "\033[0;31m"

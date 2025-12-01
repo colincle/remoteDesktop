@@ -1,0 +1,7 @@
+tunnel: remoteDesktop
+credentials-file: /Users/clement/.cloudflared/cert.pem
+
+ingress:
+  - hostname: remotedesktop.example.com
+    service: http://localhost:10000
+  - service: http_status:404

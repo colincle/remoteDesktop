@@ -1,14 +1,11 @@
 #!/bin/bash
 set -e
 
-# Create build directory if it doesn't exist
 mkdir -p build
 cd build
 
-# Configure with CMake
-cmake ..
+cmake .. -DCMAKE_PREFIX_PATH="/usr/local/opt/qt"
 
-# Build the project
-cmake --build . -- -j$(nproc)
+cmake --build . -- -j"$(sysctl -n hw.ncpu)"
 
 echo "Build finished!"

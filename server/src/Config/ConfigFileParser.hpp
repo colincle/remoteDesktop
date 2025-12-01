@@ -13,29 +13,35 @@
 class ConfigFileParser
 {
 private:
-    std::filesystem::path filePath;
-    t_config config;
+	std::filesystem::path filePath;
+	t_config config;
+	bool listenIP = false;
+	bool listenPortRange = false;
+	bool cloudflaredUrl = false;
 
 public:
-    ConfigFileParser();
+	ConfigFileParser();
 
-    //======================================================================================GETTERS
-    const t_config& getConfig();
+	//======================================================================================GETTERS
+	const t_config& getConfig();
 
 private:
-    //======================================================================================PARSING
-    std::vector<std::string> loadConfigFile();
-    std::vector<t_token> tokenizeLines(std::vector<std::string>& lines);
-    std::vector<t_directive> createDirectives(const std::vector<t_token>& tokens);
+	//======================================================================================PARSING
+	std::vector<std::string> loadConfigFile();
+	std::vector<t_token> tokenizeLines(std::vector<std::string>& lines);
+	std::vector<t_directive> createDirectives(const std::vector<t_token>& tokens);
 
-    //==============================================================================BUILDING CONFIG
-    void fillConfig(const std::vector<t_directive>& directives);
-    void setListenConf(const t_directive& directive);
+	//==============================================================================BUILDING CONFIG
+	void fillConfig(const std::vector<t_directive>& directives);
+	void setListenIP(const t_directive& directive);
+	void setListenPortRange(const t_directive& directive);
+	void setCloudflaredUrl(const t_directive& directive);
+	void checkConfig();
 
-    //======================================================================================HELPERS
-    void optionsCount(const t_directive& directive, size_t min, size_t max);
-    void checkIP(const t_token& token, std::string& ip);
-    void checkPort(const t_token& token, int port);
+	//======================================================================================HELPERS
+	void optionsCount(const t_directive& directive, size_t min, size_t max);
+	void checkIP(const t_token& token, std::string& ip);
+	void checkPort(const t_token& token, int port);
 };
 
 std::ostream& operator<<(std::ostream& os, const t_config& cfg);

@@ -8,6 +8,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
+find_package(OpenSSL REQUIRED)
 
 # Grab all .cpp and .hpp files recursively
 file(GLOB_RECURSE SOURCES
@@ -30,6 +31,8 @@ target_include_directories(Server PRIVATE
 )
 
 target_link_libraries(Server PRIVATE
+	OpenSSL::SSL
+	OpenSSL::Crypto
 	Qt6::Core
 	Qt6::Gui
 	Qt6::Widgets

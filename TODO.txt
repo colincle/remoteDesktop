@@ -1,0 +1,10 @@
+generate a default config file when it doesn not exist
+secure the connection
+make it tcp
+handle dirty regions
+create ui
+make the server a daemon
+make a domain name free version 
+handle not being connected to cloudflare
+auto update cloudflare
+auto delete cloudflare stuff

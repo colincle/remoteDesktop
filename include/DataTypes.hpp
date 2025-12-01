@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <QImage>
 
 typedef struct s_token
 {
@@ -18,6 +19,25 @@ typedef struct s_directive
 
 typedef struct s_config
 {
-    int port;
-    std::string ip;
+	std::string ip;
+	int portStart;
+	int portEnd;
+	int port;
+	std::string cloudflaredUrl;
 }   t_config;
+
+typedef struct s_dirtyTile
+{
+    int y, x, height, width;
+    std::vector<uint8_t> tile;
+} t_dirtyTile;
+
+
+typedef struct s_frame
+{
+    bool fullFrame = false;
+    int howManyTiles = 0;
+    std::vector<uint8_t> screen;
+    std::vector<t_dirtyTile> tiles;
+    QImage lastFrameImage;
+} t_frame;

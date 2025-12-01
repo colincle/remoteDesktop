@@ -1,0 +1,1 @@
+vim ~/.local/share/remoteDesktop/server.conf
