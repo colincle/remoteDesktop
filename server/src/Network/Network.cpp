@@ -102,15 +102,12 @@ void Network::stream() {
 			continue; // Nothing changed
 
 		if (frame.fullFrame) {
-			// Send fullFrame flag
 			bool fullFlag = true;
 			send(client, &fullFlag, sizeof(fullFlag), 0);
 
-			// Send full frame size
 			int dataSize = static_cast<int>(frame.screen.size());
 			send(client, &dataSize, sizeof(dataSize), 0);
 
-			// Send full frame JPEG data
 			size_t sent = 0;
 			while (sent < frame.screen.size()) {
 				ssize_t n = send(client, frame.screen.data() + sent, frame.screen.size() - sent, 0);
@@ -119,32 +116,40 @@ void Network::stream() {
 			}
 			if (!Streaming) break;
 		} else {
-			// Send fullFrame flag
 			bool fullFlag = false;
 			send(client, &fullFlag, sizeof(fullFlag), 0);
 
-			// Send number of tiles
 			int tileCount = frame.howManyTiles;
 			send(client, &tileCount, sizeof(tileCount), 0);
 
-			// Send each tile
+			// Batch all tile metadata + data into a single buffer
+			size_t totalSize = 0;
+			for (auto& tile : frame.tiles)
+				totalSize += 5 * sizeof(int) + tile.tile.size();
+
+			std::vector<char> buffer(totalSize);
+			size_t offset = 0;
+
 			for (auto& tile : frame.tiles) {
-				send(client, &tile.y, sizeof(tile.y), 0);
-				send(client, &tile.x, sizeof(tile.x), 0);
-				send(client, &tile.height, sizeof(tile.height), 0);
-				send(client, &tile.width, sizeof(tile.width), 0);
+				memcpy(buffer.data() + offset, &tile.y, sizeof(int)); offset += sizeof(int);
+				memcpy(buffer.data() + offset, &tile.x, sizeof(int)); offset += sizeof(int);
+				memcpy(buffer.data() + offset, &tile.height, sizeof(int)); offset += sizeof(int);
+				memcpy(buffer.data() + offset, &tile.width, sizeof(int)); offset += sizeof(int);
 
 				int dataSize = static_cast<int>(tile.tile.size());
-				send(client, &dataSize, sizeof(dataSize), 0);
+				memcpy(buffer.data() + offset, &dataSize, sizeof(int)); offset += sizeof(int);
 
-				size_t sent = 0;
-				while (sent < tile.tile.size()) {
-					ssize_t n = send(client, tile.tile.data() + sent, tile.tile.size() - sent, 0);
-					if (n <= 0) { Streaming = false; break; }
-					sent += n;
-				}
-				if (!Streaming) break;
+				memcpy(buffer.data() + offset, tile.tile.data(), tile.tile.size()); offset += tile.tile.size();
 			}
+
+			// Send the whole buffer at once
+			size_t sent = 0;
+			while (sent < buffer.size()) {
+				ssize_t n = send(client, buffer.data() + sent, buffer.size() - sent, 0);
+				if (n <= 0) { Streaming = false; break; }
+				sent += n;
+			}
+			if (!Streaming) break;
 		}
 
 		usleep(33000); // ~30 FPS
@@ -156,7 +161,6 @@ void Network::stream() {
 		client = -1;
 	}
 }
-
 
 void Network::killProcessOnPort(int port) {
 	std::string cmd = "lsof -t -i :" + std::to_string(port);

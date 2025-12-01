@@ -4,6 +4,8 @@
 #include <QDataStream>
 #include <QPainter>
 #include <iostream>
+#include <QElapsedTimer>
+
 
 MjpegClient::MjpegClient(const QString &url, QWidget *parent)
 	: QWidget(parent), m_url(url)
@@ -23,11 +25,8 @@ MjpegClient::MjpegClient(const QString &url, QWidget *parent)
 
 	connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {
 		QByteArray chunk = reply->readAll();
-		std::cout << "Received " << chunk.size() << " bytes" << std::endl;
-		std::cout << "First bytes: " << chunk.left(50).toHex().toStdString() << std::endl;
-
-		m_buffer.append(chunk);      // <- append first
-		processBuffer();             // <- then process
+		m_buffer.append(chunk);
+		processBuffer();
 	});
 
 
@@ -71,55 +70,59 @@ void MjpegClient::processBuffer()
 			int tileCount;
 			stream >> tileCount;
 
-			int headerSize = sizeof(bool) + sizeof(int);
+			int offset = sizeof(bool) + sizeof(int);
 			bool enoughData = true;
 
+			// If first tiles of the frame, create blank image
 			if (m_currentImage.isNull()) {
 				int maxW = 0, maxH = 0;
 				for (int i = 0; i < tileCount; ++i) {
-					if (m_buffer.size() < static_cast<qsizetype>(headerSize + 5 * sizeof(int))) { enoughData = false; break; }
+					if (m_buffer.size() < static_cast<qsizetype>(offset + 5 * sizeof(int))) { enoughData = false; break; }
 					int y, x, h, w, dataSize;
-					memcpy(&y, m_buffer.data() + headerSize, sizeof(int));
-					memcpy(&x, m_buffer.data() + headerSize + sizeof(int), sizeof(int));
-					memcpy(&h, m_buffer.data() + headerSize + 2 * sizeof(int), sizeof(int));
-					memcpy(&w, m_buffer.data() + headerSize + 3 * sizeof(int), sizeof(int));
-					memcpy(&dataSize, m_buffer.data() + headerSize + 4 * sizeof(int), sizeof(int));
+					memcpy(&y, m_buffer.data() + offset, sizeof(int));
+					memcpy(&x, m_buffer.data() + offset + sizeof(int), sizeof(int));
+					memcpy(&h, m_buffer.data() + offset + 2 * sizeof(int), sizeof(int));
+					memcpy(&w, m_buffer.data() + offset + 3 * sizeof(int), sizeof(int));
+					memcpy(&dataSize, m_buffer.data() + offset + 4 * sizeof(int), sizeof(int));
+
 					maxW = std::max(maxW, x + w);
 					maxH = std::max(maxH, y + h);
-					headerSize += 5 * sizeof(int) + dataSize;
+					offset += 5 * sizeof(int) + dataSize;
 				}
 				m_currentImage = QImage(maxW, maxH, QImage::Format_RGB32);
 				m_currentImage.fill(Qt::black);
-				headerSize = sizeof(bool) + sizeof(int);
+				offset = sizeof(bool) + sizeof(int);
 			}
 
+			// Draw all tiles
 			for (int i = 0; i < tileCount; ++i) {
-				if (m_buffer.size() < static_cast<qsizetype>(headerSize + 5 * sizeof(int))) { enoughData = false; break; }
+				if (m_buffer.size() < static_cast<qsizetype>(offset + 5 * sizeof(int))) { enoughData = false; break; }
 
 				int y, x, h, w, dataSize;
-				memcpy(&y, m_buffer.data() + headerSize, sizeof(int));
-				memcpy(&x, m_buffer.data() + headerSize + sizeof(int), sizeof(int));
-				memcpy(&h, m_buffer.data() + headerSize + 2 * sizeof(int), sizeof(int));
-				memcpy(&w, m_buffer.data() + headerSize + 3 * sizeof(int), sizeof(int));
-				memcpy(&dataSize, m_buffer.data() + headerSize + 4 * sizeof(int), sizeof(int));
+				memcpy(&y, m_buffer.data() + offset, sizeof(int));
+				memcpy(&x, m_buffer.data() + offset + sizeof(int), sizeof(int));
+				memcpy(&h, m_buffer.data() + offset + 2 * sizeof(int), sizeof(int));
+				memcpy(&w, m_buffer.data() + offset + 3 * sizeof(int), sizeof(int));
+				memcpy(&dataSize, m_buffer.data() + offset + 4 * sizeof(int), sizeof(int));
 
-				if (m_buffer.size() < static_cast<qsizetype>(headerSize + 5 * sizeof(int) + dataSize)) { enoughData = false; break; }
+				if (m_buffer.size() < static_cast<qsizetype>(offset + 5 * sizeof(int) + dataSize)) { enoughData = false; break; }
 
-				QByteArray tileData = m_buffer.mid(headerSize + 5 * sizeof(int), dataSize);
+				QByteArray tileData = m_buffer.mid(offset + 5 * sizeof(int), dataSize);
 				QImage tileImg;
 				if (!tileData.isEmpty() && tileImg.loadFromData(tileData, "JPEG")) {
 					QPainter p(&m_currentImage);
 					p.drawImage(x, y, tileImg);
 				}
 
-				headerSize += 5 * sizeof(int) + dataSize;
+				offset += 5 * sizeof(int) + dataSize;
 			}
 
 			if (!enoughData) break;
+
 			label->setPixmap(QPixmap::fromImage(m_currentImage).scaled(label->size(),
 																	   Qt::KeepAspectRatio,
 																	   Qt::SmoothTransformation));
-			m_buffer.remove(0, headerSize);
+			m_buffer.remove(0, offset);
 		}
 	}
 }

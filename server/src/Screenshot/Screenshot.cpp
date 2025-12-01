@@ -60,8 +60,8 @@ bool Screenshot::newFrame(int &width, int &height, int quality, t_frame& frame)
     }
 
     // Compare tiles
-    const int tileRows = 10;
-    const int tileCols = 10;
+    const int tileRows = 20;
+    const int tileCols = 20;
     int tileWidth = width / tileCols;
     int tileHeight = height / tileRows;
     std::vector<t_dirtyTile> dirtyTiles;
