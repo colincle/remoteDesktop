@@ -13,6 +13,7 @@
 #include <fstream>
 #include <regex>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 
 CloudflaredTunnel::CloudflaredTunnel(const std::string &cloudflaredPath, int port, const std::string &cloudflaredUrl)
