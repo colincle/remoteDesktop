@@ -1,10 +1,9 @@
 #include "MjpegClient.hpp"
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QDataStream>
 #include <QPainter>
 #include <iostream>
-#include <QElapsedTimer>
+#include <cstring>
 
 
 MjpegClient::MjpegClient(const QString &url, QWidget *parent)
@@ -37,21 +36,18 @@ MjpegClient::MjpegClient(const QString &url, QWidget *parent)
 
 void MjpegClient::processBuffer()
 {
-	QDataStream stream(&m_buffer, QIODevice::ReadOnly);
-	stream.setByteOrder(QDataStream::LittleEndian);
-
+	// The server sends a custom binary stream (native-endian; client and server
+	// are assumed to share the same architecture): a 1-byte fullFrame flag, then
+	// either a full JPEG frame or a set of changed "dirty tiles".
 	while (true) {
-		if (stream.atEnd()) break;
-		stream.device()->seek(0);
-
 		if (m_buffer.size() < static_cast<qsizetype>(sizeof(bool))) break;
 		bool fullFrame;
-		stream >> fullFrame;
+		memcpy(&fullFrame, m_buffer.constData(), sizeof(bool));
 
 		if (fullFrame) {
 			if (m_buffer.size() < static_cast<qsizetype>(sizeof(bool) + sizeof(int))) break;
 			int dataSize;
-			stream >> dataSize;
+			memcpy(&dataSize, m_buffer.constData() + sizeof(bool), sizeof(int));
 
 			if (m_buffer.size() < static_cast<qsizetype>(sizeof(bool) + sizeof(int) + dataSize)) break;
 
@@ -68,7 +64,7 @@ void MjpegClient::processBuffer()
 		} else {
 			if (m_buffer.size() < static_cast<qsizetype>(sizeof(bool) + sizeof(int))) break;
 			int tileCount;
-			stream >> tileCount;
+			memcpy(&tileCount, m_buffer.constData() + sizeof(bool), sizeof(int));
 
 			int offset = sizeof(bool) + sizeof(int);
 			bool enoughData = true;

@@ -1,6 +1,12 @@
 #pragma once
 
+// Debug logging is on for development builds and off for shipped builds
+// (the CMake `SHIPPED` option defines this macro).
+#ifdef SHIPPED
+#define DEBUG false
+#else
 #define DEBUG true
+#endif
 
 #define APP_DATA_DIR ".local/share/remoteDesktop"
 #define CONFIG_FILE_NAME "server.conf"

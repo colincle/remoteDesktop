@@ -71,20 +71,6 @@ bool CloudflaredTunnel::runCommandCapture(const std::string &cmd, std::string &o
 	return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-// bool CloudflaredTunnel::runCommand(const std::string &cmd) {
-// 	pid_t pid = fork();
-// 	if (pid < 0) return false;
-
-// 	if (pid == 0) {
-// 		execl("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
-// 		_exit(1);
-// 	}
-
-// 	int status = 0;
-// 	waitpid(pid, &status, 0);
-// 	return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-// }
-
 // Helper: ensure the app storage dir exists and return it (absolute)
 std::string CloudflaredTunnel::ensureStorageDir()
 {
@@ -278,6 +264,23 @@ bool CloudflaredTunnel::start()
 	}
 
 	std::string configPath = storageDir + "/config.yml";
+	std::string targetHostname = tunnelName + "." + m_name;
+
+	// Did the effective hostname change since the last run? This covers editing
+	// cloudflaredUrl in server.conf. Read the old config before regenerating it.
+	bool hostnameChanged = true;
+	{
+		std::ifstream existing(configPath);
+		if (existing) {
+			std::string old((std::istreambuf_iterator<char>(existing)), std::istreambuf_iterator<char>());
+			hostnameChanged = old.find("hostname: " + targetHostname) == std::string::npos;
+		}
+	}
+
+	// Keep config.yml in sync with the current domain on every run, so a domain
+	// change actually takes effect instead of being silently ignored.
+	if (!newTunnel)
+		createCloudflaredConfigFile(storageDir, tunnelName);
 
 	m_pid = fork();
 	if (m_pid == 0) {
@@ -299,7 +302,7 @@ bool CloudflaredTunnel::start()
 		_exit(1);
 	}
 
-	if (newTunnel)
+	if (newTunnel || hostnameChanged)
 	{
 		std::string dnsUrl = "https://dash.cloudflare.com/?to=/:account/:zone/dns/records";
 #if defined(__APPLE__)
@@ -330,7 +333,7 @@ bool CloudflaredTunnel::start()
 	else
 	{
 		std::cout << MAGENTA << "\n==================== Cloudflared setup successful ======================\n\n" << RESET;
-		std::cout << "Use the adress "  << GREEN << tunnelName << "." << m_name << RESET << " to connect to this server." << std::endl;
+		std::cout << "Use the address "  << GREEN << tunnelName << "." << m_name << RESET << " to connect to this server." << std::endl;
 		std::cout << MAGENTA << "\n========================================================================\n" << RESET;
 	}
 	return true;
@@ -339,98 +342,3 @@ bool CloudflaredTunnel::start()
 bool CloudflaredTunnel::isRunning() const {
 	return m_pid > 0;
 }
-
-// #include "CloudflaredTunnel.hpp"
-// #include <unistd.h>
-// #include <sys/wait.h>
-// #include <signal.h>
-// #include <regex>
-// #include <string>
-// #include <sstream>
-// #include <cstring>
-
-// CloudflaredTunnel::CloudflaredTunnel(const std::string &cloudflaredPath, int localPort)
-// 	: m_path(cloudflaredPath), m_port(localPort), m_pid(-1), m_pipeFd(-1) {}
-
-// CloudflaredTunnel::~CloudflaredTunnel() {
-// 	if (m_pid > 0) {
-// 		kill(m_pid, SIGTERM);
-// 		waitpid(m_pid, nullptr, 0);
-// 	}
-// 	if (m_pipeFd != -1) {
-// 		close(m_pipeFd);
-// 	}
-// }
-
-// bool CloudflaredTunnel::start() {
-// 	int pipefd[2];
-// 	if (pipe(pipefd) < 0) return false;
-
-// 	m_pid = fork();
-// 	if (m_pid < 0) return false;
-
-// 	if (m_pid == 0) {
-// 		// Child
-// 		dup2(pipefd[1], STDOUT_FILENO);
-// 		dup2(pipefd[1], STDERR_FILENO);
-// 		close(pipefd[0]);
-// 		close(pipefd[1]);
-
-// 		std::string cmd = m_path + " tunnel --url http://localhost:" + std::to_string(m_port);
-// 		execl("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
-// 		_exit(1);
-// 	}
-
-// 	// Parent
-// 	close(pipefd[1]);
-// 	m_pipeFd = pipefd[0];
-
-// 	char buffer[2048];
-// 	bool inCreatedBlock = false;
-
-// 	while (true) {
-// 		ssize_t r = read(m_pipeFd, buffer, sizeof(buffer) - 1);
-// 		if (r <= 0) break;
-
-// 		buffer[r] = '\0';
-// 		std::stringstream ss(buffer);
-// 		std::string line;
-
-// 		while (std::getline(ss, line)) {
-// 			if (line.find("Your quick Tunnel has been created!") != std::string::npos) {
-// 				inCreatedBlock = true;
-// 				continue;
-// 			}
-// 			if (inCreatedBlock) {
-// 				std::string url = parseUrl(line);
-// 				if (!url.empty()) {
-// 					m_url = url;
-// 					return true;
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	return false;
-// }
-
-// std::string CloudflaredTunnel::parseUrl(const std::string &line) {
-// 	static const std::regex urlRegex(R"(https://[a-zA-Z0-9\-]+\.trycloudflare\.com)");
-// 	std::smatch match;
-// 	if (std::regex_search(line, match, urlRegex)) {
-// 		std::string url = match.str();
-// 		if (url.size() <= 26) return ""; // sanity check
-// 		url = url.substr(8, url.size() - 8 - 18);
-// 		for (size_t i = 0; i < url.size(); i++) url[i]++;
-// 		return url;
-// 	}
-// 	return "";
-// }
-
-// std::string CloudflaredTunnel::getUrl() const {
-// 	return m_url;
-// }
-
-// bool CloudflaredTunnel::isRunning() const {
-// 	return m_pid > 0;
-// }

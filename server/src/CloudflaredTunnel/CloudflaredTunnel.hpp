@@ -1,7 +1,7 @@
-#ifndef CLOUDFLARED_TUNNEL_HPP
-#define CLOUDFLARED_TUNNEL_HPP
+#pragma once
 
 #include <string>
+#include <sys/types.h> // pid_t
 
 class CloudflaredTunnel
 {
@@ -23,7 +23,6 @@ private:
 	std::string certPath;
 	std::string credDir;
 
-	// bool runCommand(const std::string &cmd);
 	bool runCommandCapture(const std::string &cmd, std::string &output);
 
 	std::string ensureStorageDir();
@@ -36,30 +35,3 @@ private:
 	bool extractCredPath(const std::string &output);
 	std::string getTunnelID(const std::string &credPath);
 };
-
-#endif
-
-
-// #pragma once
-// #include <string>
-
-// class CloudflaredTunnel
-// {
-// private:
-//         std::string m_path;
-//         int m_port;
-//         pid_t m_pid = -1;
-//         int m_pipeFd = -1;
-//         std::string m_url;
-
-//         std::string parseUrl(const std::string &line);
-
-// public:
-//         CloudflaredTunnel(const std::string &cloudflaredPath, int localPort);
-//         ~CloudflaredTunnel();
-
-//         bool start();
-//         std::string getUrl() const;
-
-//         bool isRunning() const;
-// };

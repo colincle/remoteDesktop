@@ -1,5 +1,7 @@
-tunnel: remoteDesktop
-credentials-file: /Users/clement/.cloudflared/cert.pem
+# Sample cloudflared tunnel config. The app generates the real one at runtime
+# under ~/.local/share/remoteDesktop/ — this file is only a format reference.
+tunnel: example-tunnel
+credentials-file: ~/.cloudflared/<tunnel-id>.json
 
 ingress:
   - hostname: remotedesktop.example.com

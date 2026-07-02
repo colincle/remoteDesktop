@@ -21,8 +21,7 @@ private:
     t_config config;
     int sock = -1;
     int client = -1;
-    bool Streaming = false;
-    int w = 0, h = 0;
+    bool streaming = false;
 
     CloudflaredTunnel* tunnel = nullptr;
 
@@ -32,6 +31,6 @@ private:
     void killProcessOnPort(int port);
 
 public:
-	Network(t_config& config);
+	explicit Network(const t_config& config);
 	void runServer();
 };

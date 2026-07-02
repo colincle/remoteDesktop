@@ -6,6 +6,7 @@
 #include <QBuffer>
 #include <vector>
 #include <cstdint>
+#include <cstring>
 
 bool Screenshot::newFrame(int &width, int &height, int quality, t_frame& frame)
 {
@@ -41,8 +42,8 @@ bool Screenshot::newFrame(int &width, int &height, int quality, t_frame& frame)
     width = img.width();
     height = img.height();
 
-    // First frame? send everything
-    if (frame.screen.empty()) {
+    // First frame (or the resolution changed) — send everything.
+    if (frame.screen.empty() || frame.lastFrameImage.size() != img.size()) {
         QByteArray ba;
         QBuffer buffer(&ba);
         buffer.open(QIODevice::WriteOnly);
@@ -59,31 +60,32 @@ bool Screenshot::newFrame(int &width, int &height, int quality, t_frame& frame)
         return true;
     }
 
-    // Compare tiles
+    // Compare tiles. The last column/row extend to the image edge so the
+    // remainder pixels (when width/height aren't multiples of the tile count)
+    // are still covered. Both images are RGBA8888, so a per-scanline memcmp is
+    // far faster than a per-pixel QImage::pixel() comparison.
     const int tileRows = 20;
     const int tileCols = 20;
-    int tileWidth = width / tileCols;
-    int tileHeight = height / tileRows;
+    const int tileWidth = width / tileCols;
+    const int tileHeight = height / tileRows;
     std::vector<t_dirtyTile> dirtyTiles;
 
     for (int ty = 0; ty < tileRows; ++ty) {
         for (int tx = 0; tx < tileCols; ++tx) {
+            int startX = tx * tileWidth;
+            int startY = ty * tileHeight;
+            int w = (tx == tileCols - 1) ? (width - startX) : tileWidth;
+            int h = (ty == tileRows - 1) ? (height - startY) : tileHeight;
+
             bool dirty = false;
-            for (int y = 0; y < tileHeight && !dirty; ++y) {
-                for (int x = 0; x < tileWidth && !dirty; ++x) {
-                    int px = tx * tileWidth + x;
-                    int py = ty * tileHeight + y;
-                    if (frame.lastFrameImage.pixel(px, py) != img.pixel(px, py)) {
-                        dirty = true;
-                    }
-                }
+            for (int y = 0; y < h && !dirty; ++y) {
+                const uchar* prev = frame.lastFrameImage.constScanLine(startY + y) + startX * 4;
+                const uchar* curr = img.constScanLine(startY + y) + startX * 4;
+                if (memcmp(prev, curr, static_cast<size_t>(w) * 4) != 0)
+                    dirty = true;
             }
 
             if (dirty) {
-                int startX = tx * tileWidth;
-                int startY = ty * tileHeight;
-                int w = tileWidth;
-                int h = tileHeight;
                 QImage tileImg = img.copy(startX, startY, w, h);
 
                 QByteArray tileBA;

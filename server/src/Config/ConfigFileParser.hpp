@@ -15,6 +15,7 @@ class ConfigFileParser
 private:
 	std::filesystem::path filePath;
 	t_config config;
+	bool firstRun = false;
 	bool listenIP = false;
 	bool listenPortRange = false;
 	bool cloudflaredUrl = false;

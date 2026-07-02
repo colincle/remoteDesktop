@@ -24,16 +24,16 @@ std::vector<std::string> ConfigFileParser::loadConfigFile()
 	if (!home) error("HOME environment variable not set", "Config");
 
 	std::string dir = std::string(home) + "/.local/share/remoteDesktop";
-	mkdir(dir.c_str(), 0755);
+	std::filesystem::create_directories(dir); // recursive, unlike a bare mkdir
 
-	// just the filename, not the full path
-	std::string filePath = dir + "/server.conf";
+	filePath = dir + "/server.conf"; // member, used for error locations
 
 	std::ifstream file(filePath);
 	if (!file)
 	{
+		firstRun = true;
 		std::ofstream out(filePath);
-		if (!out) error("Cannot create config file '" + filePath + "'", "Configuration file");
+		if (!out) error("Cannot create config file '" + filePath.string() + "'", "Configuration file");
 
 		out << R"(
 					# IP the server listens on. 0.0.0.0 = all interfaces
@@ -45,13 +45,13 @@ std::vector<std::string> ConfigFileParser::loadConfigFile()
 					listenPortRange 10340 10340;
 
 					# Public URL or hostname where the server is exposed via tunnel
-					#cloudflaredUrl example.com;
+					# Set this to your own Cloudflare-managed domain.
 					cloudflaredUrl example.com;
 				)";
 		out.close();
 
 		file.open(filePath);
-		if (!file) error("Cannot read newly created config file '" + filePath + "'", "Configuration file");
+		if (!file) error("Cannot read newly created config file '" + filePath.string() + "'", "Configuration file");
 	}
 
 	std::vector<std::string> lines;
@@ -228,6 +228,20 @@ void ConfigFileParser::checkConfig()
 		error("Missing configuration: listenPortRange", "ConfigFileParser");
 	if (!cloudflaredUrl)
 		error("Missing configuration: cloudflaredUrl", "ConfigFileParser");
+
+	// Refuse to start on the placeholder domain. This is what a first run hits:
+	// we create the config, then stop here so the user can set their own domain
+	// before a tunnel is ever created.
+	if (config.cloudflaredUrl == "example.com")
+	{
+		if (firstRun)
+			throw std::runtime_error(
+				"\nA config file was created at " + filePath.string() + "\n"
+				"Set 'cloudflaredUrl' to your own Cloudflare-managed domain, then run again.\n\n");
+		throw std::runtime_error(
+			"\nThe config at " + filePath.string() + " still uses the placeholder domain 'example.com'.\n"
+			"Set 'cloudflaredUrl' to your own Cloudflare-managed domain, then run again.\n\n");
+	}
 }
 
 //======================================================================================HELPERS

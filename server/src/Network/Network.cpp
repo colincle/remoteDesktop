@@ -12,14 +12,18 @@
 #include <memory>
 #include <array>
 #include <cstdlib>
+#include <csignal>
+#include <sstream>
 
-Network::Network(t_config& config) : config(config) {}
+Network::Network(const t_config& config) : config(config) {}
 
 void Network::runServer() {
 	while (true) {
-		killProcessOnPort(config.portStart);
-		// Ensure the server socket is listening
+		// (Re)bind only when we don't have a listening socket. Freeing the port
+		// happens here, before binding — never while we're already listening, or
+		// we'd kill our own process.
 		if (sock < 0) {
+			killProcessOnPort(config.portStart);
 			startListening();
 			makeTunnel();
 		}
@@ -33,8 +37,7 @@ void Network::runServer() {
 		}
 		DEBUG_OUT << "Client connected" << std::endl;
 
-		Streaming = true;
-		w = h = 0;
+		streaming = true;
 
 		// Write HTTP header once
 		std::string header =
@@ -96,7 +99,7 @@ void Network::makeTunnel() {
 void Network::stream() {
 	t_frame frame;
 
-	while (Streaming) {
+	while (streaming) {
 		int width = 0, height = 0;
 		if (!Screenshot::newFrame(width, height, 90, frame))
 			continue; // Nothing changed
@@ -111,10 +114,10 @@ void Network::stream() {
 			size_t sent = 0;
 			while (sent < frame.screen.size()) {
 				ssize_t n = send(client, frame.screen.data() + sent, frame.screen.size() - sent, 0);
-				if (n <= 0) { Streaming = false; break; }
+				if (n <= 0) { streaming = false; break; }
 				sent += n;
 			}
-			if (!Streaming) break;
+			if (!streaming) break;
 		} else {
 			bool fullFlag = false;
 			send(client, &fullFlag, sizeof(fullFlag), 0);
@@ -146,16 +149,16 @@ void Network::stream() {
 			size_t sent = 0;
 			while (sent < buffer.size()) {
 				ssize_t n = send(client, buffer.data() + sent, buffer.size() - sent, 0);
-				if (n <= 0) { Streaming = false; break; }
+				if (n <= 0) { streaming = false; break; }
 				sent += n;
 			}
-			if (!Streaming) break;
+			if (!streaming) break;
 		}
 
 		usleep(33000); // ~30 FPS
 	}
 
-	Streaming = false;
+	streaming = false;
 	if (client >= 0) {
 		close(client);
 		client = -1;
@@ -183,10 +186,22 @@ void Network::killProcessOnPort(int port) {
 		return;
 	}
 
-	int pid = std::stoi(result);
-	std::cout << "Killing PID " << pid << " on port " << port << "\n";
+	// lsof -t prints one PID per line; terminate each one (SIGTERM first).
+	std::istringstream pids(result);
+	std::string line;
+	while (std::getline(pids, line)) {
+		if (line.empty())
+			continue;
 
-	std::string killCmd = "kill -9 " + std::to_string(pid);
-	system(killCmd.c_str());
+		int pid = 0;
+		try {
+			pid = std::stoi(line);
+		} catch (const std::exception&) {
+			continue;
+		}
+
+		std::cout << "Killing PID " << pid << " on port " << port << "\n";
+		kill(pid, SIGTERM);
+	}
 	usleep(33000);
 }
