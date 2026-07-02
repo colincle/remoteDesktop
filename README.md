@@ -6,6 +6,8 @@ and cursor, but remote input (mouse and keyboard control) is not implemented.
 Built as a personal project to explore screen capture, MJPEG streaming, and
 tunnel automation in C++.
 
+![The client viewing a remote screen](screenshots/screenshot.png)
+
 > ⚠️ **Experimental, personal use only.** The stream is *unauthenticated*. See
 > [Limitations & security](#limitations--security) before running it.
 
