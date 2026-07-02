@@ -1,0 +1,24 @@
+# Build output
+build/
+*/build/
+
+# Compiled objects / libraries
+*.o
+*.o.d
+*.d
+*.so
+moc_*
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Editor / OS
+.DS_Store
+.vscode/
+
+# cloudflared binaries — download separately (see README), don't commit (~39 MB each)
+cloudflared/mac/cloudflared
+cloudflared/linux/cloudflared
