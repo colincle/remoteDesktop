@@ -264,18 +264,6 @@ bool CloudflaredTunnel::start()
 	}
 
 	std::string configPath = storageDir + "/config.yml";
-	std::string targetHostname = tunnelName + "." + m_name;
-
-	// Did the effective hostname change since the last run? This covers editing
-	// cloudflaredUrl in server.conf. Read the old config before regenerating it.
-	bool hostnameChanged = true;
-	{
-		std::ifstream existing(configPath);
-		if (existing) {
-			std::string old((std::istreambuf_iterator<char>(existing)), std::istreambuf_iterator<char>());
-			hostnameChanged = old.find("hostname: " + targetHostname) == std::string::npos;
-		}
-	}
 
 	// Keep config.yml in sync with the current domain on every run, so a domain
 	// change actually takes effect instead of being silently ignored.
@@ -302,40 +290,38 @@ bool CloudflaredTunnel::start()
 		_exit(1);
 	}
 
-	if (newTunnel || hostnameChanged)
-	{
-		std::string dnsUrl = "https://dash.cloudflare.com/?to=/:account/:zone/dns/records";
+	// Always open the DNS dashboard and print the steps, worded as a reminder so
+	// it can simply be ignored when the record is already in place.
+	// Detach the browser and silence its output, otherwise it inherits this
+	// terminal and leaks its own warnings here (e.g. Firefox GFX messages).
+	std::string dnsUrl = "https://dash.cloudflare.com/?to=/:account/:zone/dns/records";
 #if defined(__APPLE__)
-		std::string openCmd = "open \"" + dnsUrl + "\"";
+	std::string openCmd = "open \"" + dnsUrl + "\" >/dev/null 2>&1";
 #else
-		std::string openCmd = "xdg-open \"" + dnsUrl + "\"";
+	std::string openCmd = "xdg-open \"" + dnsUrl + "\" >/dev/null 2>&1 &";
 #endif
-		system(openCmd.c_str());
+	system(openCmd.c_str());
 
-		std::cout << MAGENTA << "\n========================== Cloudflared setup ===========================\n\n" << RESET;
+	std::cout << MAGENTA << "\n========================== Cloudflared setup ===========================\n\n" << RESET;
 
-		std::cout << "1. A browser window should have opened. If it didn't, open this URL yourself:\n";
-		std::cout << dnsUrl << "\n\n";
+	std::cout << "If you have not already added the DNS record for this machine, do it now.\n";
+	std::cout << "If it is already set up, ignore the steps below.\n\n";
 
-		std::cout << "2. In the DNS dashboard, click 'Add Record'.\n";
-		std::cout << "   Type: " << GREEN << "CNAME" << RESET <<"\n";
-		std::cout << "   Name: " << GREEN <<  tunnelName << RESET << "\n";
-		std::cout << "   Target: " << GREEN << tunnelId << RESET << ".cfargotunnel.com\n";
-		std::cout << "   Proxy status: " << RED << "Do not uncheck.\n\n" << RESET;
+	std::cout << "1. A browser window should have opened. If it didn't, open this URL yourself:\n";
+	std::cout << dnsUrl << "\n\n";
 
-		std::cout << "3. Save the record. DNS will propagate automatically.\n\n";
+	std::cout << "2. In the DNS dashboard, click 'Add Record'.\n";
+	std::cout << "   Type: " << GREEN << "CNAME" << RESET <<"\n";
+	std::cout << "   Name: " << GREEN <<  tunnelName << RESET << "\n";
+	std::cout << "   Target: " << GREEN << tunnelId << RESET << ".cfargotunnel.com\n";
+	std::cout << "   Proxy status: " << RED << "Do not uncheck.\n\n" << RESET;
 
-		std::cout << "When done, you can connect using:\n";
-		std::cout  << GREEN << tunnelName << "." << m_name << RESET << "\n";
+	std::cout << "3. Save the record. DNS will propagate automatically.\n\n";
 
-		std::cout << MAGENTA <<"\n========================================================================\n" << RESET;
-	}
-	else
-	{
-		std::cout << MAGENTA << "\n==================== Cloudflared setup successful ======================\n\n" << RESET;
-		std::cout << "Use the address "  << GREEN << tunnelName << "." << m_name << RESET << " to connect to this server." << std::endl;
-		std::cout << MAGENTA << "\n========================================================================\n" << RESET;
-	}
+	std::cout << "Connect to this server using:\n";
+	std::cout  << GREEN << tunnelName << "." << m_name << RESET << "\n";
+
+	std::cout << MAGENTA <<"\n========================================================================\n" << RESET;
 	return true;
 }
 

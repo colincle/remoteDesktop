@@ -6,6 +6,9 @@ and cursor, but remote input (mouse and keyboard control) is not implemented.
 Built as a personal project to explore screen capture, MJPEG streaming, and
 tunnel automation in C++.
 
+It runs on **macOS and Linux**, and the two interoperate: a Linux client can view
+a macOS server and vice versa.
+
 ![The client viewing a remote screen](screenshots/screenshot.png)
 
 > ⚠️ **Experimental, personal use only.** The stream is *unauthenticated*. See
